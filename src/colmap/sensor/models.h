@@ -91,6 +91,7 @@ enum class CameraModelId {
   kSimpleRadialFisheye = 8,
   kRadialFisheye = 9,
   kThinPrismFisheye = 10,
+  kCylindrical=11,
 };
 
 #ifndef CAMERA_MODEL_DEFINITIONS
@@ -143,7 +144,9 @@ enum class CameraModelId {
   CAMERA_MODEL_CASE(OpenCVFisheyeCameraModel)       \
   CAMERA_MODEL_CASE(FullOpenCVCameraModel)          \
   CAMERA_MODEL_CASE(FOVCameraModel)                 \
-  CAMERA_MODEL_CASE(ThinPrismFisheyeCameraModel)
+  CAMERA_MODEL_CASE(ThinPrismFisheyeCameraModel)    \
+  CAMERA_MODEL_CASE(CylindricalCameraModel)    
+
 #endif
 
 #ifndef CAMERA_MODEL_SWITCH_CASES
@@ -370,6 +373,12 @@ struct ThinPrismFisheyeCameraModel
     : public BaseCameraModel<ThinPrismFisheyeCameraModel> {
   CAMERA_MODEL_DEFINITIONS(
       CameraModelId::kThinPrismFisheye, "THIN_PRISM_FISHEYE", 2, 2, 8)
+};
+
+struct CylindricalCameraModel 
+    : public BaseCameraModel<CylindricalCameraModel> {
+  CAMERA_MODEL_DEFINITIONS(
+      CameraModelId::kCylindrical, "CYLINDRICAL", 2, 2, 0)
 };
 
 // Check whether camera model with given name or identifier exists.
@@ -1535,6 +1544,74 @@ void ThinPrismFisheyeCameraModel::Distortion(
   const T radial = k1 * r2 + k2 * r4 + k3 * r6 + k4 * r8;
   *du = u * radial + T(2) * p1 * uv + p2 * (r2 + T(2) * u2) + sx1 * r2;
   *dv = v * radial + T(2) * p2 * uv + p1 * (r2 + T(2) * v2) + sy1 * r2;
+}
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// CylindricalCameraModel
+
+std::string CylindricalCameraModel::InitializeParamsInfo() {
+  return "fx, fy, cx, cy";
+}
+
+std::array<size_t, 2> CylindricalCameraModel::InitializeFocalLengthIdxs() {
+  return {0, 1};
+}
+
+std::array<size_t, 2> CylindricalCameraModel::InitializePrincipalPointIdxs() {
+  return {2, 3};
+}
+
+std::array<size_t, 0> CylindricalCameraModel::InitializeExtraParamsIdxs() {
+  return {};
+}
+
+std::vector<double> CylindricalCameraModel::InitializeParams(
+    const double focal_length, const size_t width, const size_t height) {
+  return {focal_length, focal_length, width / 2.0, height / 2.0};
+}
+
+template <typename T>
+void CylindricalCameraModel::ImgFromCam(const T* params, T u, T v, T w, 
+                                      T* x, T* y) {
+  const T f1 = params[0];
+  const T f2 = params[1];
+  const T c1 = params[2];
+  const T c2 = params[3];
+
+  u /= w;
+  v /= w;
+
+  // No Distortion
+
+  // Transform to image coordinates
+
+  const T alpha = atan2(-u, T(1.0));
+  const T theta = -v / sqrt(T(1.0) + u * u);
+  // const T alpha = atan2(u, T(1.0));
+  // const T theta = v / sqrt(T(1.0) + u * u);
+  *x = (c1 - alpha * f1);
+  *y = (c2 - theta * f2);
+}
+
+template <typename T>
+void CylindricalCameraModel::CamFromImg(const T* params, const T x, const T y,
+                                      T* u, T* v, T* w) {
+  const T f1 = params[0];
+  const T f2 = params[1];
+  const T c1 = params[2];
+  const T c2 = params[3];
+
+
+  const T alpha = (c1 - 2*c1 + x) / f1;
+  const T theta = (c2 - 2*c2 + y) / f2; 
+  // const T alpha = (c1 - x) / f1;
+  // const T theta = (c2 - y) / f2;
+
+  *u = tan(alpha);
+  *v = theta / cos(alpha);
+  *w = 1;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
