@@ -91,7 +91,8 @@ enum class CameraModelId {
   kSimpleRadialFisheye = 8,
   kRadialFisheye = 9,
   kThinPrismFisheye = 10,
-  kCylindrical=11,
+  kCylindrical = 11,
+  kMeiFisheye = 12,
 };
 
 #ifndef CAMERA_MODEL_DEFINITIONS
@@ -145,8 +146,8 @@ enum class CameraModelId {
   CAMERA_MODEL_CASE(FullOpenCVCameraModel)          \
   CAMERA_MODEL_CASE(FOVCameraModel)                 \
   CAMERA_MODEL_CASE(ThinPrismFisheyeCameraModel)    \
-  CAMERA_MODEL_CASE(CylindricalCameraModel)    
-
+  CAMERA_MODEL_CASE(CylindricalCameraModel)         \
+  CAMERA_MODEL_CASE(MeiFisheyeCameraModel)
 #endif
 
 #ifndef CAMERA_MODEL_SWITCH_CASES
@@ -375,10 +376,45 @@ struct ThinPrismFisheyeCameraModel
       CameraModelId::kThinPrismFisheye, "THIN_PRISM_FISHEYE", 2, 2, 8)
 };
 
+
+// Camera model with projection on a cylinder. Usually obtained from warping
+// fisheye images as the vertical lines in the imgare are not distorted and 
+// the projection and reprojection funcitons are simpler and faster.
+//
+// Inspired by: 
+//
+//    https://plaut.github.io/fisheye_tutorial/
+//
+// Parameter list is expected in the following order:
+//  
+//    fx, fy, cx, cy
+//
 struct CylindricalCameraModel 
     : public BaseCameraModel<CylindricalCameraModel> {
   CAMERA_MODEL_DEFINITIONS(
       CameraModelId::kCylindrical, "CYLINDRICAL", 2, 2, 0)
+};
+
+
+// Fisheye camera model used in many applications. The center of the projection
+// sphere is first translated on the principal (Z) axis by a calibration param 
+// xi. From there, the projection and distortion are similar to other fisheye
+// camera models. Used in Kitti360 dataset. This implementation only has 2 
+// polynomial coefficients.
+//
+// Details in:
+//
+//    Unified projection model (C. Mei, and P. Rives, Single View Point 
+//    Omnidirectional Camera Calibration from Planar Grids, ICRA 2007)
+//
+// Parameter list is expected in the following order:
+//  
+//    gamma1, gamma2, cx, cy, xi, k1, k2
+//
+struct MeiFisheyeCameraModel
+  : public BaseCameraModel<MeiFisheyeCameraModel> {
+    CAMERA_MODEL_DEFINITIONS(
+      CameraModelId::kMeiFisheye, "MEI_FISHEYE", 2, 2, 3)
 };
 
 // Check whether camera model with given name or identifier exists.
@@ -1580,19 +1616,19 @@ void CylindricalCameraModel::ImgFromCam(const T* params, T u, T v, T w,
   const T c1 = params[2];
   const T c2 = params[3];
 
-  u /= w;
-  v /= w;
+  const T alpha = ceres::atan2(u, w);
+
+  // u /= w;
+  // v /= w;
 
   // No Distortion
 
   // Transform to image coordinates
-
-  const T alpha = atan2(-u, T(1.0));
-  const T theta = -v / sqrt(T(1.0) + u * u);
+  const T theta = v / ceres::sqrt(w * w + u * u);
   // const T alpha = atan2(u, T(1.0));
   // const T theta = v / sqrt(T(1.0) + u * u);
-  *x = (c1 - alpha * f1);
-  *y = (c2 - theta * f2);
+  *x = (c1 + alpha * f1);
+  *y = (c2 + theta * f2);
 }
 
 template <typename T>
@@ -1604,14 +1640,110 @@ void CylindricalCameraModel::CamFromImg(const T* params, const T x, const T y,
   const T c2 = params[3];
 
 
-  const T alpha = (c1 - 2*c1 + x) / f1;
-  const T theta = (c2 - 2*c2 + y) / f2; 
+  const T alpha = (x - c1) / f1;
+  const T theta = (y - c2) / f2; 
   // const T alpha = (c1 - x) / f1;
   // const T theta = (c2 - y) / f2;
 
-  *u = tan(alpha);
-  *v = theta / cos(alpha);
-  *w = 1;
+  *u = ceres::sin(alpha);
+  *v = theta;
+  *w = ceres::cos(alpha);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Mei Camera Model
+
+
+std::string MeiFisheyeCameraModel::InitializeParamsInfo() {
+  return "fx, fy, cx, cy, xi, k1, k2";
+}
+
+std::array<size_t, 2> MeiFisheyeCameraModel::InitializeFocalLengthIdxs() {
+  return {0, 1};
+}
+
+std::array<size_t, 2> MeiFisheyeCameraModel::InitializePrincipalPointIdxs() {
+  return {2, 3};
+}
+
+std::array<size_t, 3> MeiFisheyeCameraModel::InitializeExtraParamsIdxs() {
+  return {4, 5, 6};
+}
+
+std::vector<double> MeiFisheyeCameraModel::InitializeParams(
+    const double focal_length, const size_t width, const size_t height) {
+  return {focal_length, focal_length, width / 2.0, height / 2.0, 0, 0, 0, 0};
+}
+
+
+template <typename T>
+void MeiFisheyeCameraModel::ImgFromCam(
+    const T* params, T u, T v, T w, T* x, T* y) {
+  const T gamma1 = params[0];
+  const T gamma2 = params[1];
+  const T c1 = params[2];
+  const T c2 = params[3];
+  const T xi = params[4];
+  // const T k1 = params[5];
+  // const T k2 = params[6];
+
+  const T norm = ceres::sqrt(u *u + v * v + w * w);
+
+  const T zn = w / norm;
+  
+  const T xn = (u / norm) / (xi + zn);
+  const T yn = (u / norm) / (xi + zn);
+
+  T du, dv;
+  Distortion(&params[5], xn, yn, &du, &dv);
+
+  *x = (xn + du) * gamma1 + c1;
+  *y = (yn + dv) * gamma2 + c2;
+}
+
+template <typename T>
+void MeiFisheyeCameraModel::CamFromImg(
+    const T* params, const T x, const T y, T* u, T* v, T* w) {
+  const T f1 = params[0];
+  const T f2 = params[1];
+  const T c1 = params[2];
+  const T c2 = params[3];
+  const T xi = params[4];
+
+  // Lift points to normalized plane
+  const T xs = (x - c1) / f1;
+  const T ys = (y - c2) / f2;
+  
+  const T den = xs * xs + ys * ys + 1;
+  const T num = xi + sqrt(1 + (1 - xi * xi) * (xs * xs + ys * ys));
+  const T frac = num / den;
+  *u = xs * frac;
+  *v = ys * frac;
+  *w = frac - xi;
+
+  IterativeUndistortion(&params[5], u, v);
+}
+
+template <typename T>
+void MeiFisheyeCameraModel::Distortion(
+    const T* extra_params, const T u, const T v, T* du, T* dv) {
+
+  const T ro2 = u * u + v * v;
+  // const T ro = ceres::sqrt(ro2);
+
+  // if (ro > T(std::numeric_limits<double>::epsilon())) {
+  const T k1 = extra_params[0];
+  const T k2 = extra_params[1];
+
+  const T factor = 1.0 + k1 * ro2 + k2 * ro2 * ro2;
+
+  *du = (u * factor) - u;
+  *dv = (v * factor) - v;
+  // } else {
+  //   *du = T(0);
+  //   *dv = T(0);
+  // }
+  
 }
 
 ////////////////////////////////////////////////////////////////////////////////
