@@ -1709,6 +1709,8 @@ void MeiFisheyeCameraModel::CamFromImg(
   const T c1 = params[2];
   const T c2 = params[3];
   const T xi = params[4];
+  const T k1 = params[5];
+  const T k2 = params[6];
 
   // Lift points to normalized plane
   const T xs = (x - c1) / f1;
@@ -1721,7 +1723,10 @@ void MeiFisheyeCameraModel::CamFromImg(
   *v = ys * frac;
   *w = frac - xi;
 
-  IterativeUndistortion(&params[5], u, v);
+  // IterativeUndistortion(&params[5], u, v);
+  Eigen::Vector
+
+
 }
 
 template <typename T>
