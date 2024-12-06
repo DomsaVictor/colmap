@@ -39,6 +39,8 @@
 
 #include <Eigen/Core>
 #include <Eigen/LU>
+#include <unsupported/Eigen/Polynomials>
+
 #include <ceres/jet.h>
 
 namespace colmap {
@@ -1684,21 +1686,22 @@ void MeiFisheyeCameraModel::ImgFromCam(
   const T c1 = params[2];
   const T c2 = params[3];
   const T xi = params[4];
-  // const T k1 = params[5];
-  // const T k2 = params[6];
+  const T k1 = params[5];
+  const T k2 = params[6];
 
-  const T norm = ceres::sqrt(u *u + v * v + w * w);
+  const T norm = ceres::sqrt(u * u + v * v + w * w);
 
   const T zn = w / norm;
   
   const T xn = (u / norm) / (xi + zn);
-  const T yn = (u / norm) / (xi + zn);
+  const T yn = (v / norm) / (xi + zn);
+    
+  const T ro2 = xn * xn + yn * yn;
 
-  T du, dv;
-  Distortion(&params[5], xn, yn, &du, &dv);
+  const T factor = 1.0 + k1 * ro2 + k2 * ro2 * ro2;
 
-  *x = (xn + du) * gamma1 + c1;
-  *y = (yn + dv) * gamma2 + c2;
+  *x = (xn * factor) * gamma1 + c1;
+  *y = (yn * factor) * gamma2 + c2;
 }
 
 template <typename T>
@@ -1713,42 +1716,41 @@ void MeiFisheyeCameraModel::CamFromImg(
   const T k2 = params[6];
 
   // Lift points to normalized plane
-  const T xs = (x - c1) / f1;
-  const T ys = (y - c2) / f2;
+  const T px = (x - c1) / f1;
+  const T py = (y - c2) / f2;
   
+  const T rho = ceres::sqrt(px * px + py * py);
+
+  Eigen::VectorXd poly(6);
+
+  poly << -rho, 1.0, 0.0, k1, 0.0, k2; 
+  Eigen::PolynomialSolver<T, Eigen::Dynamic> solver;
+  solver.compute(poly);
+  
+  // const Eigen::PolynomialSolver<double, Eigen::Dynamic>::RootsType &r = solver.roots();
+  // Eigen::VectorXcd roots = solver.roots();
+
+  // std::vector<T> real_pos_roots;
+  // for (int i = 0; i < roots.size(); ++i) {
+  //     if (std::abs(roots[i].imag()) < 1e-6 && roots[i].real() >= 0.0) { // Check if imaginary part is negligible
+  //         real_pos_roots.push_back(roots[i].real());
+  //     }
+  // }
+
+  // const T factor = *std::min_element(begin(real_pos_roots), end(real_pos_roots));
+
+  bool found;
+  const T factor = solver.absSmallestRealRoot(found, 1e-6);
+
+  const T xs = px * factor / rho;
+  const T ys = py * factor / rho;
+
   const T den = xs * xs + ys * ys + 1;
   const T num = xi + sqrt(1 + (1 - xi * xi) * (xs * xs + ys * ys));
   const T frac = num / den;
   *u = xs * frac;
   *v = ys * frac;
   *w = frac - xi;
-
-  // IterativeUndistortion(&params[5], u, v);
-  Eigen::Vector
-
-
-}
-
-template <typename T>
-void MeiFisheyeCameraModel::Distortion(
-    const T* extra_params, const T u, const T v, T* du, T* dv) {
-
-  const T ro2 = u * u + v * v;
-  // const T ro = ceres::sqrt(ro2);
-
-  // if (ro > T(std::numeric_limits<double>::epsilon())) {
-  const T k1 = extra_params[0];
-  const T k2 = extra_params[1];
-
-  const T factor = 1.0 + k1 * ro2 + k2 * ro2 * ro2;
-
-  *du = (u * factor) - u;
-  *dv = (v * factor) - v;
-  // } else {
-  //   *du = T(0);
-  //   *dv = T(0);
-  // }
-  
 }
 
 ////////////////////////////////////////////////////////////////////////////////
