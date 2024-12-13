@@ -1653,8 +1653,7 @@ void CylindricalCameraModel::CamFromImg(const T* params, const T x, const T y,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Mei Camera Model
-
+// MeiFisheyeCameraModel
 
 std::string MeiFisheyeCameraModel::InitializeParamsInfo() {
   return "fx, fy, cx, cy, xi, k1, k2";
@@ -1674,7 +1673,7 @@ std::array<size_t, 3> MeiFisheyeCameraModel::InitializeExtraParamsIdxs() {
 
 std::vector<double> MeiFisheyeCameraModel::InitializeParams(
     const double focal_length, const size_t width, const size_t height) {
-  return {focal_length, focal_length, width / 2.0, height / 2.0, 0, 0, 0, 0};
+  return {focal_length, focal_length, width / 2.0, height / 2.0, 1e-3, 1e-3, 1e-3};
 }
 
 
@@ -1727,18 +1726,6 @@ void MeiFisheyeCameraModel::CamFromImg(
   Eigen::PolynomialSolver<T, Eigen::Dynamic> solver;
   solver.compute(poly);
   
-  // const Eigen::PolynomialSolver<double, Eigen::Dynamic>::RootsType &r = solver.roots();
-  // Eigen::VectorXcd roots = solver.roots();
-
-  // std::vector<T> real_pos_roots;
-  // for (int i = 0; i < roots.size(); ++i) {
-  //     if (std::abs(roots[i].imag()) < 1e-6 && roots[i].real() >= 0.0) { // Check if imaginary part is negligible
-  //         real_pos_roots.push_back(roots[i].real());
-  //     }
-  // }
-
-  // const T factor = *std::min_element(begin(real_pos_roots), end(real_pos_roots));
-
   bool found;
   const T factor = solver.absSmallestRealRoot(found, 1e-6);
 
