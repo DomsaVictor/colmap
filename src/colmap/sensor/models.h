@@ -1620,15 +1620,10 @@ void CylindricalCameraModel::ImgFromCam(const T* params, T u, T v, T w,
 
   const T alpha = ceres::atan2(u, w);
 
-  // u /= w;
-  // v /= w;
-
   // No Distortion
 
   // Transform to image coordinates
   const T theta = v / ceres::sqrt(w * w + u * u);
-  // const T alpha = atan2(u, T(1.0));
-  // const T theta = v / sqrt(T(1.0) + u * u);
   *x = (c1 + alpha * f1);
   *y = (c2 + theta * f2);
 }
@@ -1645,9 +1640,11 @@ void CylindricalCameraModel::CamFromImg(const T* params, const T x, const T y,
   const T alpha = (x - c1) / f1;
   const T theta = (y - c2) / f2; 
 
-  *u = ceres::sin(alpha);
-  *v = theta;
   *w = ceres::cos(alpha);
+  *w = 1.0;
+
+  *u = ceres::sin(alpha) / *w;
+  *v = theta / *w;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1733,9 +1730,11 @@ void MeiFisheyeCameraModel::CamFromImg(
   const T den = xs * xs + ys * ys + 1;
   const T num = xi + sqrt(1 + (1 - xi * xi) * (xs * xs + ys * ys));
   const T frac = num / den;
-  *u = xs * frac;
-  *v = ys * frac;
+  
   *w = frac - xi;
+
+  *u = xs * frac / *w;
+  *v = ys * frac / *w;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
