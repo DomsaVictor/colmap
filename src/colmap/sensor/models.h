@@ -1644,8 +1644,6 @@ void CylindricalCameraModel::CamFromImg(const T* params, const T x, const T y,
 
   const T alpha = (x - c1) / f1;
   const T theta = (y - c2) / f2; 
-  // const T alpha = (c1 - x) / f1;
-  // const T theta = (c2 - y) / f2;
 
   *u = ceres::sin(alpha);
   *v = theta;
