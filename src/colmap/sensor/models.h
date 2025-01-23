@@ -95,6 +95,7 @@ enum class CameraModelId {
   kThinPrismFisheye = 10,
   kCylindrical = 11,
   kMeiFisheye = 12,
+  kEquidistantFisheye = 13,
 };
 
 #ifndef CAMERA_MODEL_DEFINITIONS
@@ -149,7 +150,8 @@ enum class CameraModelId {
   CAMERA_MODEL_CASE(FOVCameraModel)                 \
   CAMERA_MODEL_CASE(ThinPrismFisheyeCameraModel)    \
   CAMERA_MODEL_CASE(CylindricalCameraModel)         \
-  CAMERA_MODEL_CASE(MeiFisheyeCameraModel)
+  CAMERA_MODEL_CASE(MeiFisheyeCameraModel)          \
+  CAMERA_MODEL_CASE(EquidistantFisheyeCameraModel)
 #endif
 
 #ifndef CAMERA_MODEL_SWITCH_CASES
@@ -417,6 +419,22 @@ struct MeiFisheyeCameraModel
   : public BaseCameraModel<MeiFisheyeCameraModel> {
     CAMERA_MODEL_DEFINITIONS(
       CameraModelId::kMeiFisheye, "MEI_FISHEYE", 2, 2, 3)
+};
+
+// Fisheye camera model used in a Carla simulator implementation 
+//
+// The derived model equasions could be found in paper:
+//    Steffen Abraham, Wolfgang Förstner. Fish-Eye-Stereo Calibration and Epipolar Rectification, (2005)
+//    http://www.ipb.uni-bonn.de/pdfs/Steffen2005Fish.pdf
+//
+// Parameter list is expected in the following order:
+//  
+//    fx, fy, cx, cy, k0, k1, k2, k3, k4
+//
+struct EquidistantFisheyeCameraModel
+  : public BaseCameraModel<EquidistantFisheyeCameraModel> {
+    CAMERA_MODEL_DEFINITIONS(
+      CameraModelId::kEquidistantFisheye, "EQUIDISTANT_FISHEYE", 2, 2, 5)
 };
 
 // Check whether camera model with given name or identifier exists.
@@ -1735,6 +1753,59 @@ void MeiFisheyeCameraModel::CamFromImg(
 
   *u = xs * frac / *w;
   *v = ys * frac / *w;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+// EquidistantFisheyeCameraModel
+
+std::string EquidistantFisheyeCameraModel::InitializeParamsInfo() {
+  return "fx, fy, cx, cy, k0, k1, k2, k3, k4";
+}
+
+std::array<size_t, 2> EquidistantFisheyeCameraModel::InitializeFocalLengthIdxs() {
+  return {0, 1};
+}
+
+std::array<size_t, 2> EquidistantFisheyeCameraModel::InitializePrincipalPointIdxs() {
+  return {2, 3};
+}
+
+std::array<size_t, 3> EquidistantFisheyeCameraModel::InitializeExtraParamsIdxs() {
+  return {4, 5, 6, 7, 8};
+}
+
+std::vector<double> EquidistantFisheyeCameraModel::InitializeParams(
+    const double focal_length, const size_t width, const size_t height) {
+  return {focal_length, focal_length, width / 2.0, height / 2.0, 1e-6, 1e-6, 1e-6, 1e-6, 1e-6};
+}
+
+
+template <typename T>
+void EquidistantFisheyeCameraModel::ImgFromCam(
+    const T* params, T u, T v, T w, T* x, T* y) {
+  const T gamma1 = params[0];
+  const T gamma2 = params[1];
+  const T c1 = params[2];
+  const T c2 = params[3];
+  const T xi = params[4];
+  const T k1 = params[5];
+  const T k2 = params[6];
+
+  
+
+}
+
+template <typename T>
+void EquidistantFisheyeCameraModel::CamFromImg(
+    const T* params, const T x, const T y, T* u, T* v, T* w) {
+  const T f1 = params[0];
+  const T f2 = params[1];
+  const T c1 = params[2];
+  const T c2 = params[3];
+  const T xi = params[4];
+  const T k1 = params[5];
+  const T k2 = params[6];
 }
 
 ////////////////////////////////////////////////////////////////////////////////
