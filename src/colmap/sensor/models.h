@@ -1801,18 +1801,37 @@ void EquidistantFisheyeCameraModel::ImgFromCam(
   const T y_norm = v * theta / ( norm + std::numeric_limits<T>::epsilon());
 
   // apply distortion
-  const T x2 = x_norm * x_norm;
-  const T y2 = y_norm * y_norm;
-  const T r2 = x2 * y2;
-  const T r4 = r2 * r2;
-  const T r6 = r4 * r2;
-
-  const T x_dist = x_norm * (T(1.0) + k0*r2 + k1*r4 + k4*r6) + T(2.0) * k2 * x_norm * y_norm + k3 * (r2 + T(2.0) * x2);
-  const T y_dist = y_norm * (T(1.0) + k0*r2 + k1*r4 + k4*r6) + T(2.0) * k3 * x_norm * y_norm + k2 * (r2 + T(2.0) * y2);
+  T du, dv;
+  Distortion(params[4], x_norm, y_norm, &du, &dv);
+  const T x_dist = x_norm + du;
+  const T y_dist = y_norm + dv;
 
   *x = x_dist * fx + cx;
   *y = y_dist * fy + cy;
 
+}
+
+template <typename T>
+void EquidistantFisheyeCameraModel::Distortion(
+  const T* params, T u, T v, T* du, T* dv) {
+    const T k0 = params[0];  
+    const T k1 = params[1];
+    const T k2 = params[2];
+    const T k3 = params[3];
+    const T k4 = params[4];
+
+    const T x2 = u * u;
+    const T x2 = x_norm * x_norm;
+    const T y2 = y_norm * y_norm;
+    const T r2 = x2 * y2;
+    const T r4 = r2 * r2;
+    const T r6 = r4 * r2;
+
+    const T x_dist = x_norm * (k0*r2 + k1*r4 + k4*r6) + T(2.0) * k2 * x_norm * y_norm + k3 * (r2 + T(2.0) * x2);
+    const T y_dist = y_norm * (k0*r2 + k1*r4 + k4*r6) + T(2.0) * k3 * x_norm * y_norm + k2 * (r2 + T(2.0) * y2);
+
+    *du = x_dist;
+    *dv = y_dist;
 }
 
 template <typename T>
@@ -1828,8 +1847,20 @@ void EquidistantFisheyeCameraModel::CamFromImg(
   const T k3 = params[5];
   const T k4 = params[6];
 
+  *u = (x - cx) / fx;
+  *v = (y - cy) / fy;
 
+  IterativeUndistortion(params[4], u, v);
 
+  const T theta = ceres::sqrt(*u * *u + *v * *v);
+  const T sin_theta = ceres::sin(theta);
+  const T cos_theta = ceres::cos(theta);
+
+  const T factor = sin_theta / ( theta + std::numeric_limits<T>::epsilon());
+
+  *u = *u * factor;
+  *v = *v * factor;
+  *w = cos_theta;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
