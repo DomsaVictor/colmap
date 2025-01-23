@@ -1784,28 +1784,52 @@ std::vector<double> EquidistantFisheyeCameraModel::InitializeParams(
 template <typename T>
 void EquidistantFisheyeCameraModel::ImgFromCam(
     const T* params, T u, T v, T w, T* x, T* y) {
-  const T gamma1 = params[0];
-  const T gamma2 = params[1];
-  const T c1 = params[2];
-  const T c2 = params[3];
-  const T xi = params[4];
+  const T fx = params[0];
+  const T fu = params[1];
+  const T cx = params[2];
+  const T cy = params[3];
+  const T k0 = params[4];
   const T k1 = params[5];
   const T k2 = params[6];
+  const T k3 = params[5];
+  const T k4 = params[6];
 
-  
+  const T norm = ceres::sqrt(u * u + v * v);
+  const T theta = ceres::atan2(norm, w);
+
+  const T x_norm = u * theta / ( norm + std::numeric_limits<T>::epsilon());
+  const T y_norm = v * theta / ( norm + std::numeric_limits<T>::epsilon());
+
+  // apply distortion
+  const T x2 = x_norm * x_norm;
+  const T y2 = y_norm * y_norm;
+  const T r2 = x2 * y2;
+  const T r4 = r2 * r2;
+  const T r6 = r4 * r2;
+
+  const T x_dist = x_norm * (T(1.0) + k0*r2 + k1*r4 + k4*r6) + T(2.0) * k2 * x_norm * y_norm + k3 * (r2 + T(2.0) * x2);
+  const T y_dist = y_norm * (T(1.0) + k0*r2 + k1*r4 + k4*r6) + T(2.0) * k3 * x_norm * y_norm + k2 * (r2 + T(2.0) * y2);
+
+  *x = x_dist * fx + cx;
+  *y = y_dist * fy + cy;
 
 }
 
 template <typename T>
 void EquidistantFisheyeCameraModel::CamFromImg(
     const T* params, const T x, const T y, T* u, T* v, T* w) {
-  const T f1 = params[0];
-  const T f2 = params[1];
-  const T c1 = params[2];
-  const T c2 = params[3];
-  const T xi = params[4];
+  const T fx = params[0];
+  const T fy = params[1];
+  const T cx = params[2];
+  const T cy = params[3];
+  const T k0 = params[4];
   const T k1 = params[5];
   const T k2 = params[6];
+  const T k3 = params[5];
+  const T k4 = params[6];
+
+
+
 }
 
 ////////////////////////////////////////////////////////////////////////////////
