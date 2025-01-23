@@ -1771,7 +1771,7 @@ std::array<size_t, 2> EquidistantFisheyeCameraModel::InitializePrincipalPointIdx
   return {2, 3};
 }
 
-std::array<size_t, 3> EquidistantFisheyeCameraModel::InitializeExtraParamsIdxs() {
+std::array<size_t, 5> EquidistantFisheyeCameraModel::InitializeExtraParamsIdxs() {
   return {4, 5, 6, 7, 8};
 }
 
@@ -1785,14 +1785,9 @@ template <typename T>
 void EquidistantFisheyeCameraModel::ImgFromCam(
     const T* params, T u, T v, T w, T* x, T* y) {
   const T fx = params[0];
-  const T fu = params[1];
+  const T fy = params[1];
   const T cx = params[2];
   const T cy = params[3];
-  const T k0 = params[4];
-  const T k1 = params[5];
-  const T k2 = params[6];
-  const T k3 = params[5];
-  const T k4 = params[6];
 
   const T norm = ceres::sqrt(u * u + v * v);
   const T theta = ceres::atan2(norm, w);
@@ -1802,7 +1797,7 @@ void EquidistantFisheyeCameraModel::ImgFromCam(
 
   // apply distortion
   T du, dv;
-  Distortion(params[4], x_norm, y_norm, &du, &dv);
+  Distortion(&params[4], x_norm, y_norm, &du, &dv);
   const T x_dist = x_norm + du;
   const T y_dist = y_norm + dv;
 
@@ -1821,14 +1816,13 @@ void EquidistantFisheyeCameraModel::Distortion(
     const T k4 = params[4];
 
     const T x2 = u * u;
-    const T x2 = x_norm * x_norm;
-    const T y2 = y_norm * y_norm;
+    const T y2 = v * v;
     const T r2 = x2 * y2;
     const T r4 = r2 * r2;
     const T r6 = r4 * r2;
 
-    const T x_dist = x_norm * (k0*r2 + k1*r4 + k4*r6) + T(2.0) * k2 * x_norm * y_norm + k3 * (r2 + T(2.0) * x2);
-    const T y_dist = y_norm * (k0*r2 + k1*r4 + k4*r6) + T(2.0) * k3 * x_norm * y_norm + k2 * (r2 + T(2.0) * y2);
+    const T x_dist = u * (k0*r2 + k1*r4 + k4*r6) + T(2.0) * k2 * u * v + k3 * (r2 + T(2.0) * x2);
+    const T y_dist = v * (k0*r2 + k1*r4 + k4*r6) + T(2.0) * k3 * u * v + k2 * (r2 + T(2.0) * y2);
 
     *du = x_dist;
     *dv = y_dist;
@@ -1841,16 +1835,11 @@ void EquidistantFisheyeCameraModel::CamFromImg(
   const T fy = params[1];
   const T cx = params[2];
   const T cy = params[3];
-  const T k0 = params[4];
-  const T k1 = params[5];
-  const T k2 = params[6];
-  const T k3 = params[5];
-  const T k4 = params[6];
 
   *u = (x - cx) / fx;
   *v = (y - cy) / fy;
 
-  IterativeUndistortion(params[4], u, v);
+  IterativeUndistortion(&params[4], u, v);
 
   const T theta = ceres::sqrt(*u * *u + *v * *v);
   const T sin_theta = ceres::sin(theta);
