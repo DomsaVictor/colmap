@@ -1803,8 +1803,8 @@ void EquidistantFisheyeCameraModel::ImgFromCam(
 
   *x = x_dist * fx + cx;
   *y = y_dist * fy + cy;
-
-}
+  
+  }
 
 template <typename T>
 void EquidistantFisheyeCameraModel::Distortion(
